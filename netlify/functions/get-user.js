@@ -13,6 +13,15 @@ function json(body, status = 200) {
   });
 }
 
+function getLocalDateStr(timezone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const map = {};
+  for (const p of parts) map[p.type] = p.value;
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
 export const config = { path: '/get-user' };
 
 export default async (req) => {
@@ -26,9 +35,14 @@ export default async (req) => {
   const user = await store.get(id, { type: 'json' });
   if (!user) return json({ error: 'User not found' }, 404);
 
+  const dateStr = getLocalDateStr(user.timezone || 'America/Phoenix');
+  const todayCheckin = user.checkins?.[dateStr] || null;
+
   return json({
     name: user.name,
     streak: user.streak,
     weeklyTrainingCount: user.weeklyTrainingCount || 0,
+    checkedInToday: !!todayCheckin,
+    checkinTypeToday: todayCheckin?.type || null,
   });
 };

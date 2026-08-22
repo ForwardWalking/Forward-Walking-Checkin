@@ -10,16 +10,16 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0A0D10; --panel:#12161B; --panel-2:#161C22; --border:#232A31;
-    --text:#E7EDF2; --text-dim:#8B98A5; --text-faint:#57626D;
-    --good:#2E9FC7; --bad:#D9707A;
+    --bg:#FAF9F7; --panel:#FFFFFF; --panel-2:#F1F3F4; --border:#E3E7E9;
+    --text:#1C232B; --text-dim:#5C6773; --text-faint:#8A94A0;
+    --good:#1E86AC; --bad:#C94F5C;
     --font-sans:'IBM Plex Sans', system-ui, sans-serif;
     --font-mono:'IBM Plex Mono', ui-monospace, monospace;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);min-height:100vh;}
   .wrap{max-width:420px;margin:0 auto;padding:40px 20px;}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:28px 26px;margin-bottom:18px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:28px 26px;margin-bottom:18px;box-shadow:0 1px 3px rgba(20,30,40,0.04);}
   .logo{display:block;height:56px;width:auto;margin:0 auto 26px;}
   h1{font-size:16px;font-weight:600;margin:0 0 4px;}
   p.sub{font-size:13px;color:var(--text-dim);margin:0 0 18px;line-height:1.5;}
@@ -48,6 +48,10 @@
   .streak-value{display:block;font-family:var(--font-mono);font-size:26px;font-weight:600;color:var(--good);}
   .streak-label{display:block;font-size:11px;color:var(--text-faint);margin-top:2px;}
   a.btn{display:block;text-align:center;text-decoration:none;box-sizing:border-box;}
+  .card-title{font-size:13px;font-weight:700;letter-spacing:.02em;margin-bottom:14px;}
+  .thought-scripture{font-size:14px;line-height:1.6;font-style:italic;color:var(--text);margin-bottom:12px;}
+  .thought-quote{font-size:13px;line-height:1.55;color:var(--text-dim);margin-bottom:18px;padding-left:14px;border-left:2px solid var(--good);}
+  .thought-quote .attribution{display:block;margin-top:4px;font-size:11.5px;color:var(--text-faint);}
 </style>
 </head>
 <body>
@@ -89,6 +93,26 @@
     </div>
     <a class="btn" id="trainNowBtn" href="#" target="_blank" rel="noopener">Train now</a>
   </div>
+
+  <div class="card hidden" id="thoughtCard">
+    <div class="card-title">Thought of the day</div>
+    <div class="thought-scripture" id="thoughtScripture"></div>
+    <div class="thought-quote" id="thoughtQuote"></div>
+    <button class="btn btn-outline" id="thoughtDoneBtn">I read this</button>
+    <div class="status" id="thoughtStatus"></div>
+  </div>
+
+  <div class="card hidden" id="freqCard">
+    <div class="card-title">Frequency training</div>
+    <p class="sub">A gentle tone-based relaxation aid — the science on this is genuinely mixed, so think of it as a calming tool, not a guaranteed effect.</p>
+    <label for="freqPreset">Choose a tone</label>
+    <select id="freqPreset">
+      <option value="relax">Relax — 10 Hz</option>
+      <option value="focus">Focus — 15 Hz</option>
+      <option value="sleep">Wind down — 4 Hz</option>
+    </select>
+    <button class="btn" id="freqPlayBtn">Play</button>
+  </div>
 </div>
 
 <script>
@@ -99,6 +123,36 @@ const TRAINER_APP_URL = 'https://fwneurolink.netlify.app';
 const CURRENT_TRAINER_PASSWORD = 'sample';
 
 const VAPID_PUBLIC_KEY = 'BFN5yBBcutdNjF3P1mWggdAoU9A0PXPD1AuEgPD-j2wd9v7u4-Pk058pU6R6fmhjyWXhcv-7sYOkfXMv4P40GzA';
+
+/* Starter set — public-domain scripture (KJV) paired with verified, briefly-
+   quoted historical sources. Small on purpose: every entry here has been
+   checked against a real source rather than pulled from memory. Expand this
+   array with your own verified additions over time. */
+const THOUGHTS = [
+  { scripture: '"And let us not be weary in well doing: for in due season we shall reap, if we faint not." — Galatians 6:9 (KJV)',
+    quote: 'The credit belongs to the man who is actually in the arena.', author: 'Theodore Roosevelt, "Citizenship in a Republic," 1910' },
+  { scripture: '"...by love serve one another." — Galatians 5:13 (KJV)',
+    quote: 'Everybody can be great, because anybody can serve.', author: 'Martin Luther King Jr., "The Drum Major Instinct," 1968' },
+  { scripture: '"Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest." — Joshua 1:9 (KJV)',
+    quote: 'The only thing we have to fear is fear itself.', author: 'Franklin D. Roosevelt, First Inaugural Address, 1933' },
+  { scripture: '"I can do all things through Christ which strengtheneth me." — Philippians 4:13 (KJV)',
+    quote: '...that this nation, under God, shall have a new birth of freedom.', author: 'Abraham Lincoln, Gettysburg Address, 1863' },
+  { scripture: '"Trust in the LORD with all thine heart; and lean not unto thine own understanding." — Proverbs 3:5 (KJV)',
+    quote: 'Do what you can, with what you have, where you are.', author: 'Theodore Roosevelt' },
+  { scripture: '"In every thing give thanks: for this is the will of God in Christ Jesus concerning you." — 1 Thessalonians 5:18 (KJV)',
+    quote: 'Darkness cannot drive out darkness; only light can do that.', author: 'Martin Luther King Jr., "Strength to Love," 1963' },
+  { scripture: '"For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end." — Jeremiah 29:11 (KJV)',
+    quote: 'With malice toward none, with charity for all.', author: 'Abraham Lincoln, Second Inaugural Address, 1865' },
+  { scripture: '"...they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles." — Isaiah 40:31 (KJV)',
+    quote: 'There is no effort without error and shortcoming.', author: 'Theodore Roosevelt, "Citizenship in a Republic," 1910' },
+];
+
+function dayOfYear() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const diff = now - start;
+  return Math.floor(diff / 86400000);
+}
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -147,12 +201,23 @@ async function showSetupScreen(user) {
   trainUrl.searchParams.set('pw', CURRENT_TRAINER_PASSWORD);
   document.getElementById('trainNowBtn').href = trainUrl.toString();
 
+  document.getElementById('thoughtCard').classList.remove('hidden');
+  document.getElementById('freqCard').classList.remove('hidden');
+  const thought = THOUGHTS[dayOfYear() % THOUGHTS.length];
+  document.getElementById('thoughtScripture').textContent = thought.scripture;
+  document.getElementById('thoughtQuote').innerHTML = `“${thought.quote}”<span class="attribution">— ${thought.author}</span>`;
+
   try {
     const res = await fetch(`/get-user?id=${encodeURIComponent(user.id)}`);
     if (res.ok) {
       const data = await res.json();
       document.getElementById('streakCurrent').textContent = data.streak?.current ?? 0;
       document.getElementById('weeklyCount').textContent = data.weeklyTrainingCount ?? 0;
+      if (data.checkedInToday) {
+        const thoughtBtn = document.getElementById('thoughtDoneBtn');
+        thoughtBtn.disabled = true;
+        thoughtBtn.textContent = "You're checked in for today";
+      }
     }
   } catch (err) {
     // Streak display is a nice-to-have; fail silently if it can't load.
@@ -239,6 +304,86 @@ testPushBtn.addEventListener('click', async () => {
   } catch (err) {
     setStatus(setupStatus, "Couldn't send test notification.", 'error');
   }
+});
+
+/* ---------------- Thought of the day check-in ---------------- */
+document.getElementById('thoughtDoneBtn').addEventListener('click', async (e) => {
+  const user = getStoredUser();
+  if (!user) return;
+  const btn = e.target;
+  const thoughtStatus = document.getElementById('thoughtStatus');
+  btn.disabled = true;
+  setStatus(thoughtStatus, 'Saving…');
+  try {
+    const res = await fetch('/record-offday', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: user.id }),
+    });
+    if (!res.ok) throw new Error('Failed');
+    const data = await res.json();
+    document.getElementById('streakCurrent').textContent = data.streak?.current ?? 0;
+    btn.textContent = "You're checked in for today";
+    setStatus(thoughtStatus, 'Streak updated.', 'good');
+  } catch (err) {
+    btn.disabled = false;
+    setStatus(thoughtStatus, "Couldn't save — try again.", 'error');
+  }
+});
+
+/* ---------------- Frequency training (binaural-style tones) ----------------
+   No files, no external audio — two slightly detuned tones panned hard left
+   and right create the classic "beat" effect entirely in the browser. */
+const FREQ_PRESETS = {
+  relax: { carrier: 200, beat: 10 },
+  focus: { carrier: 200, beat: 15 },
+  sleep: { carrier: 150, beat: 4 },
+};
+let freqCtx = null, freqOscL = null, freqOscR = null, freqPlaying = false;
+
+function stopFrequencyTone() {
+  if (freqOscL) { try { freqOscL.stop(); } catch (e) {} freqOscL.disconnect(); freqOscL = null; }
+  if (freqOscR) { try { freqOscR.stop(); } catch (e) {} freqOscR.disconnect(); freqOscR = null; }
+  if (freqCtx) { freqCtx.close(); freqCtx = null; }
+  freqPlaying = false;
+  document.getElementById('freqPlayBtn').textContent = 'Play';
+}
+
+function startFrequencyTone(presetKey) {
+  stopFrequencyTone();
+  const preset = FREQ_PRESETS[presetKey];
+  freqCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const merger = freqCtx.createChannelMerger(2);
+
+  freqOscL = freqCtx.createOscillator();
+  const gainL = freqCtx.createGain();
+  freqOscL.frequency.value = preset.carrier;
+  gainL.gain.value = 0.15;
+  freqOscL.connect(gainL).connect(merger, 0, 0);
+
+  freqOscR = freqCtx.createOscillator();
+  const gainR = freqCtx.createGain();
+  freqOscR.frequency.value = preset.carrier + preset.beat;
+  gainR.gain.value = 0.15;
+  freqOscR.connect(gainR).connect(merger, 0, 1);
+
+  merger.connect(freqCtx.destination);
+  freqOscL.start();
+  freqOscR.start();
+  freqPlaying = true;
+  document.getElementById('freqPlayBtn').textContent = 'Stop';
+}
+
+document.getElementById('freqPlayBtn').addEventListener('click', () => {
+  if (freqPlaying) {
+    stopFrequencyTone();
+  } else {
+    startFrequencyTone(document.getElementById('freqPreset').value);
+  }
+});
+
+document.getElementById('freqPreset').addEventListener('change', () => {
+  if (freqPlaying) startFrequencyTone(document.getElementById('freqPreset').value);
 });
 
 // Resume where they left off if already registered on this device.
