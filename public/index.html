@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forward Walking — Daily Check-in</title>
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0D10; --panel:#12161B; --panel-2:#161C22; --border:#232A31;
+    --text:#E7EDF2; --text-dim:#8B98A5; --text-faint:#57626D;
+    --good:#2E9FC7; --bad:#D9707A;
+    --font-sans:'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono:'IBM Plex Mono', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);min-height:100vh;}
+  .wrap{max-width:420px;margin:0 auto;padding:40px 20px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:28px 26px;margin-bottom:18px;}
+  .logo{display:block;height:56px;width:auto;margin:0 auto 26px;}
+  h1{font-size:16px;font-weight:600;margin:0 0 4px;}
+  p.sub{font-size:13px;color:var(--text-dim);margin:0 0 18px;line-height:1.5;}
+  label{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);font-weight:600;margin-bottom:6px;}
+  input[type="text"], select{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    font-family:var(--font-sans);font-size:14px;padding:10px 12px;border-radius:8px;margin-bottom:14px;
+  }
+  .btn{
+    width:100%;font-family:var(--font-sans);font-size:13.5px;font-weight:600;padding:11px 18px;
+    border-radius:8px;border:1px solid transparent;cursor:pointer;background:var(--good);color:#08150F;
+    margin-bottom:10px;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn-outline{background:transparent;border-color:var(--border);color:var(--text);}
+  .status{font-size:12.5px;color:var(--text-dim);min-height:18px;margin-top:6px;line-height:1.5;}
+  .status.error{color:var(--bad);}
+  .status.good{color:var(--good);}
+  .row{display:flex;gap:10px;}
+  .row select{flex:1;}
+  .hidden{display:none;}
+  .greeting{font-size:14px;color:var(--text-dim);margin-bottom:18px;}
+  .greeting strong{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <img src="/icon.png" alt="Forward Walking" class="logo">
+
+  <div class="card" id="registerCard">
+    <h1>Get started</h1>
+    <p class="sub">Just your name — no email needed.</p>
+    <label for="nameInput">Name</label>
+    <input type="text" id="nameInput" placeholder="Your name" autocomplete="off">
+    <button class="btn" id="registerBtn">Continue</button>
+    <div class="status" id="registerStatus"></div>
+  </div>
+
+  <div class="card hidden" id="setupCard">
+    <div class="greeting">Hi <strong id="greetingName"></strong> — let's set up your daily reminder.</div>
+
+    <label for="hourSelect">Remind me around</label>
+    <div class="row">
+      <select id="hourSelect"></select>
+      <select id="minuteSelect">
+        <option value="0">:00</option>
+        <option value="15">:15</option>
+        <option value="30">:30</option>
+        <option value="45">:45</option>
+      </select>
+    </div>
+
+    <button class="btn" id="enableNotifBtn">Enable notifications</button>
+    <button class="btn btn-outline hidden" id="testPushBtn">Send me a test notification</button>
+    <div class="status" id="setupStatus"></div>
+  </div>
+</div>
+
+<script>
+const VAPID_PUBLIC_KEY = 'BFN5yBBcutdNjF3P1mWggdAoU9A0PXPD1AuEgPD-j2wd9v7u4-Pk058pU6R6fmhjyWXhcv-7sYOkfXMv4P40GzA';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+const registerCard = document.getElementById('registerCard');
+const setupCard = document.getElementById('setupCard');
+const registerStatus = document.getElementById('registerStatus');
+const setupStatus = document.getElementById('setupStatus');
+const hourSelect = document.getElementById('hourSelect');
+const enableNotifBtn = document.getElementById('enableNotifBtn');
+const testPushBtn = document.getElementById('testPushBtn');
+
+for (let h = 0; h < 24; h++) {
+  const label = h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
+  hourSelect.innerHTML += `<option value="${h}">${label}</option>`;
+}
+hourSelect.value = '18';
+
+function setStatus(el, text, kind) {
+  el.textContent = text;
+  el.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('fw_user') || 'null'); }
+  catch { return null; }
+}
+
+async function showSetupScreen(user) {
+  registerCard.classList.add('hidden');
+  setupCard.classList.remove('hidden');
+  document.getElementById('greetingName').textContent = user.name;
+  if (user.pushSubscription) {
+    enableNotifBtn.classList.add('hidden');
+    testPushBtn.classList.remove('hidden');
+    setStatus(setupStatus, 'Notifications are on.', 'good');
+  }
+}
+
+document.getElementById('registerBtn').addEventListener('click', async () => {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) { setStatus(registerStatus, 'Please enter a name.', 'error'); return; }
+  setStatus(registerStatus, 'Setting things up…');
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const res = await fetch('/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, timezone }),
+    });
+    if (!res.ok) throw new Error('Registration failed');
+    const data = await res.json();
+    const user = { id: data.id, name: data.name, pushSubscription: null };
+    localStorage.setItem('fw_user', JSON.stringify(user));
+    setStatus(registerStatus, '');
+    showSetupScreen(user);
+  } catch (err) {
+    setStatus(registerStatus, "Couldn't register — try again.", 'error');
+  }
+});
+
+enableNotifBtn.addEventListener('click', async () => {
+  const user = getStoredUser();
+  if (!user) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    setStatus(setupStatus, "This browser doesn't support push notifications.", 'error');
+    return;
+  }
+  setStatus(setupStatus, 'Requesting permission…');
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      setStatus(setupStatus, 'Notifications were not allowed.', 'error');
+      return;
+    }
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+
+    const reminderHour = parseInt(hourSelect.value, 10);
+    const reminderMinute = parseInt(document.getElementById('minuteSelect').value, 10);
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    const res = await fetch('/save-subscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: user.id, pushSubscription: subscription.toJSON(), reminderHour, reminderMinute, timezone }),
+    });
+    if (!res.ok) throw new Error('Save failed');
+
+    user.pushSubscription = subscription.toJSON();
+    localStorage.setItem('fw_user', JSON.stringify(user));
+    enableNotifBtn.classList.add('hidden');
+    testPushBtn.classList.remove('hidden');
+    setStatus(setupStatus, 'Notifications are on.', 'good');
+  } catch (err) {
+    setStatus(setupStatus, "Couldn't enable notifications — try again.", 'error');
+  }
+});
+
+testPushBtn.addEventListener('click', async () => {
+  const user = getStoredUser();
+  if (!user) return;
+  setStatus(setupStatus, 'Sending test notification…');
+  try {
+    const res = await fetch('/test-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: user.id }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+    setStatus(setupStatus, 'Sent — you should see it any second.', 'good');
+  } catch (err) {
+    setStatus(setupStatus, "Couldn't send test notification.", 'error');
+  }
+});
+
+// Resume where they left off if already registered on this device.
+const existingUser = getStoredUser();
+if (existingUser) showSetupScreen(existingUser);
+</script>
+</body>
+</html>
