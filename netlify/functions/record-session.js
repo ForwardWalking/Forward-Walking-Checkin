@@ -45,6 +45,8 @@ function updateStreak(user, dateStr) {
   user.streak.best = Math.max(user.streak.best || 0, user.streak.current);
 }
 
+export const config = { path: '/record-session' };
+
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);

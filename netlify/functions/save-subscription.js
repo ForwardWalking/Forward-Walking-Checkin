@@ -13,6 +13,8 @@ function json(body, status = 200) {
   });
 }
 
+export const config = { path: '/save-subscription' };
+
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
