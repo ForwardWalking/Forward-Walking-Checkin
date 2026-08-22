@@ -47,7 +47,7 @@ export default async (req) => {
     checkins: {},
     weeklyTrainingCount: 0,
     weekStartDate: null,
-    streak: { current: 0, best: 0 },
+    streak: { current: 0, best: 0, lastCheckinDate: null },
   };
 
   const store = getStore('users');

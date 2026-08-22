@@ -43,6 +43,11 @@
   .hidden{display:none;}
   .greeting{font-size:14px;color:var(--text-dim);margin-bottom:18px;}
   .greeting strong{color:var(--text);}
+  .streak-row{display:flex;gap:14px;margin-bottom:18px;}
+  .streak-stat{flex:1;background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;}
+  .streak-value{display:block;font-family:var(--font-mono);font-size:26px;font-weight:600;color:var(--good);}
+  .streak-label{display:block;font-size:11px;color:var(--text-faint);margin-top:2px;}
+  a.btn{display:block;text-align:center;text-decoration:none;box-sizing:border-box;}
 </style>
 </head>
 <body>
@@ -76,9 +81,23 @@
     <button class="btn btn-outline hidden" id="testPushBtn">Send me a test notification</button>
     <div class="status" id="setupStatus"></div>
   </div>
+
+  <div class="card hidden" id="trainCard">
+    <div class="streak-row" id="streakRow">
+      <div class="streak-stat"><span class="streak-value" id="streakCurrent">0</span><span class="streak-label">day streak</span></div>
+      <div class="streak-stat"><span class="streak-value" id="weeklyCount">0</span><span class="streak-label">sessions this week</span></div>
+    </div>
+    <a class="btn" id="trainNowBtn" href="#" target="_blank" rel="noopener">Train now</a>
+  </div>
 </div>
 
 <script>
+const TRAINER_APP_URL = 'https://fwneurolink.netlify.app';
+/* Keep this matching the trainer app's own APP_PASSWORD constant —
+   update both together each month. This just pre-fills the password on
+   the Train Now link so people don't have to type it in separately. */
+const CURRENT_TRAINER_PASSWORD = 'sample';
+
 const VAPID_PUBLIC_KEY = 'BFN5yBBcutdNjF3P1mWggdAoU9A0PXPD1AuEgPD-j2wd9v7u4-Pk058pU6R6fmhjyWXhcv-7sYOkfXMv4P40GzA';
 
 function urlBase64ToUint8Array(base64String) {
@@ -120,6 +139,23 @@ async function showSetupScreen(user) {
     enableNotifBtn.classList.add('hidden');
     testPushBtn.classList.remove('hidden');
     setStatus(setupStatus, 'Notifications are on.', 'good');
+  }
+
+  document.getElementById('trainCard').classList.remove('hidden');
+  const trainUrl = new URL(TRAINER_APP_URL);
+  trainUrl.searchParams.set('uid', user.id);
+  trainUrl.searchParams.set('pw', CURRENT_TRAINER_PASSWORD);
+  document.getElementById('trainNowBtn').href = trainUrl.toString();
+
+  try {
+    const res = await fetch(`/get-user?id=${encodeURIComponent(user.id)}`);
+    if (res.ok) {
+      const data = await res.json();
+      document.getElementById('streakCurrent').textContent = data.streak?.current ?? 0;
+      document.getElementById('weeklyCount').textContent = data.weeklyTrainingCount ?? 0;
+    }
+  } catch (err) {
+    // Streak display is a nice-to-have; fail silently if it can't load.
   }
 }
 
