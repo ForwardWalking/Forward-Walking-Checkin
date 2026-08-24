@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Forward Walking — Daily Check-in</title>
 <link rel="icon" type="image/png" href="/icon.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Forward Walking">
+<meta name="theme-color" content="#1E86AC">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -52,10 +58,16 @@
   .thought-scripture{font-size:14px;line-height:1.6;font-style:italic;color:var(--text);margin-bottom:12px;}
   .thought-quote{font-size:13px;line-height:1.55;color:var(--text-dim);margin-bottom:18px;padding-left:14px;border-left:2px solid var(--good);}
   .thought-quote .attribution{display:block;margin-top:4px;font-size:11.5px;color:var(--text-faint);}
+  .fine-print{font-size:11.5px;color:var(--text-faint);line-height:1.5;margin:10px 0 4px;}
+  .homescreen-banner{background:var(--panel-2);border:1px solid var(--border);color:var(--text-dim);font-size:12.5px;padding:12px 14px;border-radius:10px;margin-bottom:18px;line-height:1.5;}
+  .homescreen-banner strong{color:var(--text);}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="homescreen-banner hidden" id="homescreenBanner">
+    For quick daily access, add this to your Home Screen: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.
+  </div>
   <img src="/icon.png" alt="Forward Walking" class="logo">
 
   <div class="card" id="registerCard">
@@ -81,8 +93,8 @@
       </select>
     </div>
 
-    <button class="btn" id="enableNotifBtn">Enable notifications</button>
-    <button class="btn btn-outline hidden" id="testPushBtn">Send me a test notification</button>
+    <button class="btn" id="addCalendarBtn">Add daily reminder to calendar</button>
+    <p class="fine-print">This adds a recurring event to your phone's own calendar app — works on iPhone and Android. If you change the time later, delete the old event yourself and add the new one; we can't update it for you once it's in your calendar.</p>
     <div class="status" id="setupStatus"></div>
   </div>
 
@@ -116,13 +128,22 @@
 </div>
 
 <script>
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isStandaloneApp() {
+  return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+}
+if (isIOS() && !isStandaloneApp()) {
+  document.getElementById('homescreenBanner').classList.remove('hidden');
+}
+
 const TRAINER_APP_URL = 'https://fwneurolink.netlify.app';
 /* Keep this matching the trainer app's own APP_PASSWORD constant —
    update both together each month. This just pre-fills the password on
    the Train Now link so people don't have to type it in separately. */
 const CURRENT_TRAINER_PASSWORD = 'sample';
-
-const VAPID_PUBLIC_KEY = 'BFN5yBBcutdNjF3P1mWggdAoU9A0PXPD1AuEgPD-j2wd9v7u4-Pk058pU6R6fmhjyWXhcv-7sYOkfXMv4P40GzA';
 
 /* Starter set — public-domain scripture (KJV) paired with verified, briefly-
    quoted historical sources. Small on purpose: every entry here has been
@@ -154,20 +175,12 @@ function dayOfYear() {
   return Math.floor(diff / 86400000);
 }
 
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
-}
-
 const registerCard = document.getElementById('registerCard');
 const setupCard = document.getElementById('setupCard');
 const registerStatus = document.getElementById('registerStatus');
 const setupStatus = document.getElementById('setupStatus');
 const hourSelect = document.getElementById('hourSelect');
-const enableNotifBtn = document.getElementById('enableNotifBtn');
-const testPushBtn = document.getElementById('testPushBtn');
+const addCalendarBtn = document.getElementById('addCalendarBtn');
 
 for (let h = 0; h < 24; h++) {
   const label = h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
@@ -189,11 +202,6 @@ async function showSetupScreen(user) {
   registerCard.classList.add('hidden');
   setupCard.classList.remove('hidden');
   document.getElementById('greetingName').textContent = user.name;
-  if (user.pushSubscription) {
-    enableNotifBtn.classList.add('hidden');
-    testPushBtn.classList.remove('hidden');
-    setStatus(setupStatus, 'Notifications are on.', 'good');
-  }
 
   document.getElementById('trainCard').classList.remove('hidden');
   const trainUrl = new URL(TRAINER_APP_URL);
@@ -237,7 +245,7 @@ document.getElementById('registerBtn').addEventListener('click', async () => {
     });
     if (!res.ok) throw new Error('Registration failed');
     const data = await res.json();
-    const user = { id: data.id, name: data.name, pushSubscription: null };
+    const user = { id: data.id, name: data.name };
     localStorage.setItem('fw_user', JSON.stringify(user));
     setStatus(registerStatus, '');
     showSetupScreen(user);
@@ -246,63 +254,70 @@ document.getElementById('registerBtn').addEventListener('click', async () => {
   }
 });
 
-enableNotifBtn.addEventListener('click', async () => {
+/* ---------------- Calendar reminder (.ics file) ----------------
+   Generates a standard iCalendar file client-side and hands it off to
+   whichever calendar app is already on the device — no push infrastructure,
+   no backend involvement, works the same way on iPhone and Android. */
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function generateICS(hour, minute, timezone) {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
+  const endDate = new Date(startDate.getTime() + 15 * 60000); // +15 min, correctly rolls the date if needed
+  const fmtLocal = (dt) => `${dt.getFullYear()}${pad2(dt.getMonth() + 1)}${pad2(dt.getDate())}T${pad2(dt.getHours())}${pad2(dt.getMinutes())}00`;
+  const dtstampUTC = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const uid = 'fw-checkin-' + Date.now() + '@forwardwalking';
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Forward Walking//Check-in Reminder//EN',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${dtstampUTC}`,
+    `DTSTART;TZID=${timezone}:${fmtLocal(startDate)}`,
+    `DTEND;TZID=${timezone}:${fmtLocal(endDate)}`,
+    'RRULE:FREQ=DAILY',
+    'SUMMARY:Check in with Forward Walking',
+    'DESCRIPTION:Time for your daily training or thought of the day.',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+}
+
+function downloadICS(icsContent) {
+  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'forward-walking-checkin.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+addCalendarBtn.addEventListener('click', async () => {
   const user = getStoredUser();
   if (!user) return;
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    setStatus(setupStatus, "This browser doesn't support push notifications.", 'error');
-    return;
-  }
-  setStatus(setupStatus, 'Requesting permission…');
+  const hour = parseInt(hourSelect.value, 10);
+  const minute = parseInt(document.getElementById('minuteSelect').value, 10);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  downloadICS(generateICS(hour, minute, timezone));
+  setStatus(setupStatus, 'Confirm "Add" in the prompt from your calendar app to finish.', 'good');
+
+  // Best-effort save for display continuity only — not required for the
+  // calendar file itself, which already works regardless of this call.
   try {
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      setStatus(setupStatus, 'Notifications were not allowed.', 'error');
-      return;
-    }
-    const registration = await navigator.serviceWorker.register('/sw.js');
-    await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    });
-
-    const reminderHour = parseInt(hourSelect.value, 10);
-    const reminderMinute = parseInt(document.getElementById('minuteSelect').value, 10);
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-    const res = await fetch('/save-subscription', {
+    await fetch('/save-reminder', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: user.id, pushSubscription: subscription.toJSON(), reminderHour, reminderMinute, timezone }),
+      body: JSON.stringify({ id: user.id, reminderHour: hour, reminderMinute: minute, timezone }),
     });
-    if (!res.ok) throw new Error('Save failed');
-
-    user.pushSubscription = subscription.toJSON();
-    localStorage.setItem('fw_user', JSON.stringify(user));
-    enableNotifBtn.classList.add('hidden');
-    testPushBtn.classList.remove('hidden');
-    setStatus(setupStatus, 'Notifications are on.', 'good');
   } catch (err) {
-    setStatus(setupStatus, "Couldn't enable notifications — try again.", 'error');
-  }
-});
-
-testPushBtn.addEventListener('click', async () => {
-  const user = getStoredUser();
-  if (!user) return;
-  setStatus(setupStatus, 'Sending test notification…');
-  try {
-    const res = await fetch('/test-push', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: user.id }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed');
-    setStatus(setupStatus, 'Sent — you should see it any second.', 'good');
-  } catch (err) {
-    setStatus(setupStatus, "Couldn't send test notification.", 'error');
+    // Non-critical.
   }
 });
 

@@ -43,8 +43,6 @@ export default async (req) => {
     timezone,
     reminderHour: 18,
     reminderMinute: 0,
-    pushSubscription: null,
-    lastReminderSentDate: null,
     // checkins keyed by local "YYYY-MM-DD": { type: 'training'|'offday', ...details }
     checkins: {},
     weeklyTrainingCount: 0,
