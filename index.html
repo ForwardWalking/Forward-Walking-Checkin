@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forward Walking — Daily Check-in</title>
+<link rel="icon" type="image/png" href="/icon.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Forward Walking">
+<meta name="theme-color" content="#1E86AC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAF9F7; --panel:#FFFFFF; --panel-2:#F1F3F4; --border:#E3E7E9;
+    --text:#1C232B; --text-dim:#5C6773; --text-faint:#8A94A0;
+    --good:#1E86AC; --bad:#C94F5C;
+    --font-sans:'IBM Plex Sans', system-ui, sans-serif;
+    --font-mono:'IBM Plex Mono', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-sans);min-height:100vh;}
+  .wrap{max-width:420px;margin:0 auto;padding:40px 20px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:28px 26px;margin-bottom:18px;box-shadow:0 1px 3px rgba(20,30,40,0.04);}
+  .logo{display:block;height:56px;width:auto;margin:0 auto 26px;}
+  h1{font-size:16px;font-weight:600;margin:0 0 4px;}
+  p.sub{font-size:13px;color:var(--text-dim);margin:0 0 18px;line-height:1.5;}
+  label{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);font-weight:600;margin-bottom:6px;}
+  input[type="text"], select{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
+    font-family:var(--font-sans);font-size:14px;padding:10px 12px;border-radius:8px;margin-bottom:14px;
+  }
+  .btn{
+    width:100%;font-family:var(--font-sans);font-size:13.5px;font-weight:600;padding:11px 18px;
+    border-radius:8px;border:1px solid transparent;cursor:pointer;background:var(--good);color:#08150F;
+    margin-bottom:10px;
+  }
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn-outline{background:transparent;border-color:var(--border);color:var(--text);}
+  .status{font-size:12.5px;color:var(--text-dim);min-height:18px;margin-top:6px;line-height:1.5;}
+  .status.error{color:var(--bad);}
+  .status.good{color:var(--good);}
+  .row{display:flex;gap:10px;}
+  .row select{flex:1;}
+  .hidden{display:none;}
+  .greeting{font-size:14px;color:var(--text-dim);margin-bottom:18px;}
+  .greeting strong{color:var(--text);}
+  .streak-row{display:flex;gap:14px;margin-bottom:18px;}
+  .streak-stat{flex:1;background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;}
+  .streak-value{display:block;font-family:var(--font-mono);font-size:26px;font-weight:600;color:var(--good);}
+  .streak-label{display:block;font-size:11px;color:var(--text-faint);margin-top:2px;}
+  a.btn{display:block;text-align:center;text-decoration:none;box-sizing:border-box;}
+  .card-title{font-size:13px;font-weight:700;letter-spacing:.02em;margin-bottom:14px;}
+  .thought-scripture{font-size:14px;line-height:1.6;font-style:italic;color:var(--text);margin-bottom:12px;}
+  .thought-quote{font-size:13px;line-height:1.55;color:var(--text-dim);margin-bottom:18px;padding-left:14px;border-left:2px solid var(--good);}
+  .thought-quote .attribution{display:block;margin-top:4px;font-size:11.5px;color:var(--text-faint);}
+  .fine-print{font-size:11.5px;color:var(--text-faint);line-height:1.5;margin:10px 0 4px;}
+  .homescreen-banner{background:var(--panel-2);border:1px solid var(--border);color:var(--text-dim);font-size:12.5px;padding:12px 14px;border-radius:10px;margin-bottom:18px;line-height:1.5;}
+  .homescreen-banner strong{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="homescreen-banner hidden" id="homescreenBanner">
+    For quick daily access, add this to your Home Screen: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>. And be sure to <strong>set your daily calendar reminder</strong> below!
+  </div>
+  <img src="/icon.png" alt="Forward Walking" class="logo">
+
+  <div class="card" id="registerCard">
+    <h1>Get started</h1>
+    <p class="sub">Just your name — no email needed.</p>
+    <label for="nameInput">Name</label>
+    <input type="text" id="nameInput" placeholder="Your name" autocomplete="off">
+    <button class="btn" id="registerBtn">Continue</button>
+    <div class="status" id="registerStatus"></div>
+  </div>
+
+  <div class="greeting hidden" id="topGreeting">Hi <strong id="greetingName"></strong> 👋</div>
+
+  <div class="card hidden" id="trainCard">
+    <div class="streak-row" id="streakRow">
+      <div class="streak-stat"><span class="streak-value" id="streakCurrent">0</span><span class="streak-label">day streak</span></div>
+      <div class="streak-stat"><span class="streak-value" id="weeklyCount">0</span><span class="streak-label">sessions this week</span></div>
+    </div>
+    <a class="btn" id="trainNowBtn" href="#" target="_blank" rel="noopener">Train now</a>
+  </div>
+
+  <div class="card hidden" id="thoughtCard">
+    <div class="card-title">Thought of the day</div>
+    <div class="thought-scripture" id="thoughtScripture"></div>
+    <div class="thought-quote" id="thoughtQuote"></div>
+    <button class="btn btn-outline" id="thoughtDoneBtn">I read this</button>
+    <div class="status" id="thoughtStatus"></div>
+  </div>
+
+  <div class="card hidden" id="setupCard">
+    <div class="card-title">Daily reminder</div>
+    <p class="fine-print" id="currentReminderNote">If you haven't already, set a reminder.</p>
+
+    <label for="hourSelect">Remind me around</label>
+    <div class="row">
+      <select id="hourSelect"></select>
+      <select id="minuteSelect">
+        <option value="0">:00</option>
+        <option value="15">:15</option>
+        <option value="30">:30</option>
+        <option value="45">:45</option>
+      </select>
+    </div>
+
+    <button class="btn" id="addCalendarBtn">Add daily reminder to calendar</button>
+    <p class="fine-print">This adds a recurring event to your phone's own calendar app — works on iPhone and Android. If you change the time later, delete the old event yourself and add the new one; we can't update it for you once it's in your calendar.</p>
+    <div class="status" id="setupStatus"></div>
+  </div>
+
+  <div class="card hidden" id="freqCard">
+    <div class="card-title">Frequency training</div>
+    <p class="sub">A gentle tone-based relaxation aid — the science on this is genuinely mixed, so think of it as a calming tool, not a guaranteed effect.</p>
+    <label for="freqPreset">Choose a tone</label>
+    <select id="freqPreset">
+      <option value="relax">Relax — 10 Hz</option>
+      <option value="focus">Focus — 15 Hz</option>
+      <option value="sleep">Wind down — 4 Hz</option>
+    </select>
+    <button class="btn" id="freqPlayBtn">Play</button>
+  </div>
+</div>
+
+<script>
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+function isStandaloneApp() {
+  return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+}
+if (isIOS() && !isStandaloneApp()) {
+  document.getElementById('homescreenBanner').classList.remove('hidden');
+}
+
+const TRAINER_APP_URL = 'https://fwneurolink.netlify.app';
+/* Keep this matching the trainer app's own APP_PASSWORD constant —
+   update both together each month. This just pre-fills the password on
+   the Train Now link so people don't have to type it in separately. */
+const CURRENT_TRAINER_PASSWORD = 'sample';
+
+/* Starter set — public-domain scripture (KJV) paired with verified, briefly-
+   quoted historical sources. Small on purpose: every entry here has been
+   checked against a real source rather than pulled from memory. Expand this
+   array with your own verified additions over time. */
+const THOUGHTS = [
+  { scripture: '"And let us not be weary in well doing: for in due season we shall reap, if we faint not." — Galatians 6:9 (KJV)',
+    quote: 'The credit belongs to the man who is actually in the arena.', author: 'Theodore Roosevelt, "Citizenship in a Republic," 1910' },
+  { scripture: '"...by love serve one another." — Galatians 5:13 (KJV)',
+    quote: 'Everybody can be great, because anybody can serve.', author: 'Martin Luther King Jr., "The Drum Major Instinct," 1968' },
+  { scripture: '"Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest." — Joshua 1:9 (KJV)',
+    quote: 'The only thing we have to fear is fear itself.', author: 'Franklin D. Roosevelt, First Inaugural Address, 1933' },
+  { scripture: '"I can do all things through Christ which strengtheneth me." — Philippians 4:13 (KJV)',
+    quote: '...that this nation, under God, shall have a new birth of freedom.', author: 'Abraham Lincoln, Gettysburg Address, 1863' },
+  { scripture: '"Trust in the LORD with all thine heart; and lean not unto thine own understanding." — Proverbs 3:5 (KJV)',
+    quote: 'Do what you can, with what you have, where you are.', author: 'Theodore Roosevelt' },
+  { scripture: '"In every thing give thanks: for this is the will of God in Christ Jesus concerning you." — 1 Thessalonians 5:18 (KJV)',
+    quote: 'Darkness cannot drive out darkness; only light can do that.', author: 'Martin Luther King Jr., "Strength to Love," 1963' },
+  { scripture: '"For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end." — Jeremiah 29:11 (KJV)',
+    quote: 'With malice toward none, with charity for all.', author: 'Abraham Lincoln, Second Inaugural Address, 1865' },
+  { scripture: '"...they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles." — Isaiah 40:31 (KJV)',
+    quote: 'There is no effort without error and shortcoming.', author: 'Theodore Roosevelt, "Citizenship in a Republic," 1910' },
+];
+
+function dayOfYear() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const diff = now - start;
+  return Math.floor(diff / 86400000);
+}
+
+const registerCard = document.getElementById('registerCard');
+const setupCard = document.getElementById('setupCard');
+const registerStatus = document.getElementById('registerStatus');
+const setupStatus = document.getElementById('setupStatus');
+const hourSelect = document.getElementById('hourSelect');
+const addCalendarBtn = document.getElementById('addCalendarBtn');
+
+for (let h = 0; h < 24; h++) {
+  const label = h === 0 ? '12 AM' : h < 12 ? `${h} AM` : h === 12 ? '12 PM' : `${h - 12} PM`;
+  hourSelect.innerHTML += `<option value="${h}">${label}</option>`;
+}
+hourSelect.value = '18';
+
+function setStatus(el, text, kind) {
+  el.textContent = text;
+  el.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+function getStoredUser() {
+  try { return JSON.parse(localStorage.getItem('fw_user') || 'null'); }
+  catch { return null; }
+}
+
+async function showSetupScreen(user) {
+  registerCard.classList.add('hidden');
+  setupCard.classList.remove('hidden');
+  document.getElementById('topGreeting').classList.remove('hidden');
+  document.getElementById('greetingName').textContent = user.name;
+
+  document.getElementById('trainCard').classList.remove('hidden');
+  const trainUrl = new URL(TRAINER_APP_URL);
+  trainUrl.searchParams.set('uid', user.id);
+  trainUrl.searchParams.set('pw', CURRENT_TRAINER_PASSWORD);
+  document.getElementById('trainNowBtn').href = trainUrl.toString();
+
+  document.getElementById('thoughtCard').classList.remove('hidden');
+  document.getElementById('freqCard').classList.remove('hidden');
+  const thought = THOUGHTS[dayOfYear() % THOUGHTS.length];
+  document.getElementById('thoughtScripture').textContent = thought.scripture;
+  document.getElementById('thoughtQuote').innerHTML = `“${thought.quote}”<span class="attribution">— ${thought.author}</span>`;
+
+  try {
+    const res = await fetch(`/get-user?id=${encodeURIComponent(user.id)}`);
+    if (res.ok) {
+      const data = await res.json();
+      document.getElementById('streakCurrent').textContent = data.streak?.current ?? 0;
+      document.getElementById('weeklyCount').textContent = data.weeklyTrainingCount ?? 0;
+      if (data.checkedInToday) {
+        const thoughtBtn = document.getElementById('thoughtDoneBtn');
+        thoughtBtn.disabled = true;
+        thoughtBtn.textContent = "You're checked in for today";
+      }
+      if (Number.isInteger(data.reminderHour) && Number.isInteger(data.reminderMinute)) {
+        hourSelect.value = String(data.reminderHour);
+        document.getElementById('minuteSelect').value = String(data.reminderMinute);
+      }
+    }
+  } catch (err) {
+    // Streak display is a nice-to-have; fail silently if it can't load.
+  }
+}
+
+document.getElementById('registerBtn').addEventListener('click', async () => {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) { setStatus(registerStatus, 'Please enter a name.', 'error'); return; }
+  setStatus(registerStatus, 'Setting things up…');
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const res = await fetch('/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, timezone }),
+    });
+    if (!res.ok) throw new Error('Registration failed');
+    const data = await res.json();
+    const user = { id: data.id, name: data.name };
+    localStorage.setItem('fw_user', JSON.stringify(user));
+    setStatus(registerStatus, '');
+    showSetupScreen(user);
+  } catch (err) {
+    setStatus(registerStatus, "Couldn't register — try again.", 'error');
+  }
+});
+
+/* ---------------- Calendar reminder (.ics file) ----------------
+   Generates a standard iCalendar file client-side and hands it off to
+   whichever calendar app is already on the device — no push infrastructure,
+   no backend involvement, works the same way on iPhone and Android. */
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function generateICS(hour, minute, timezone) {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0);
+  const endDate = new Date(startDate.getTime() + 15 * 60000); // +15 min, correctly rolls the date if needed
+  const fmtLocal = (dt) => `${dt.getFullYear()}${pad2(dt.getMonth() + 1)}${pad2(dt.getDate())}T${pad2(dt.getHours())}${pad2(dt.getMinutes())}00`;
+  const dtstampUTC = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const uid = 'fw-checkin-' + Date.now() + '@forwardwalking';
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Forward Walking//Check-in Reminder//EN',
+    'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${dtstampUTC}`,
+    `DTSTART;TZID=${timezone}:${fmtLocal(startDate)}`,
+    `DTEND;TZID=${timezone}:${fmtLocal(endDate)}`,
+    'RRULE:FREQ=DAILY',
+    'SUMMARY:Check in with Forward Walking',
+    'DESCRIPTION:Time for your daily training or thought of the day.',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+}
+
+function downloadICS(icsContent) {
+  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'forward-walking-checkin.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+addCalendarBtn.addEventListener('click', async () => {
+  const user = getStoredUser();
+  if (!user) return;
+  const hour = parseInt(hourSelect.value, 10);
+  const minute = parseInt(document.getElementById('minuteSelect').value, 10);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  downloadICS(generateICS(hour, minute, timezone));
+  setStatus(setupStatus, 'Confirm "Add" in the prompt from your calendar app to finish.', 'good');
+
+  // Best-effort save for display continuity (pre-filling the time pickers
+  // next visit) — not required for the calendar file itself, which already
+  // works regardless of this call.
+  try {
+    await fetch('/save-reminder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: user.id, reminderHour: hour, reminderMinute: minute, timezone }),
+    });
+  } catch (err) {
+    // Non-critical.
+  }
+});
+
+/* ---------------- Thought of the day check-in ---------------- */
+document.getElementById('thoughtDoneBtn').addEventListener('click', async (e) => {
+  const user = getStoredUser();
+  if (!user) return;
+  const btn = e.target;
+  const thoughtStatus = document.getElementById('thoughtStatus');
+  btn.disabled = true;
+  setStatus(thoughtStatus, 'Saving…');
+  try {
+    const res = await fetch('/record-offday', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: user.id }),
+    });
+    if (!res.ok) throw new Error('Failed');
+    const data = await res.json();
+    document.getElementById('streakCurrent').textContent = data.streak?.current ?? 0;
+    btn.textContent = "You're checked in for today";
+    setStatus(thoughtStatus, 'Streak updated.', 'good');
+  } catch (err) {
+    btn.disabled = false;
+    setStatus(thoughtStatus, "Couldn't save — try again.", 'error');
+  }
+});
+
+/* ---------------- Frequency training (binaural-style tones) ----------------
+   No files, no external audio — two slightly detuned tones panned hard left
+   and right create the classic "beat" effect entirely in the browser. */
+const FREQ_PRESETS = {
+  relax: { carrier: 200, beat: 10 },
+  focus: { carrier: 200, beat: 15 },
+  sleep: { carrier: 150, beat: 4 },
+};
+let freqCtx = null, freqOscL = null, freqOscR = null, freqPlaying = false;
+
+function stopFrequencyTone() {
+  if (freqOscL) { try { freqOscL.stop(); } catch (e) {} freqOscL.disconnect(); freqOscL = null; }
+  if (freqOscR) { try { freqOscR.stop(); } catch (e) {} freqOscR.disconnect(); freqOscR = null; }
+  if (freqCtx) { freqCtx.close(); freqCtx = null; }
+  freqPlaying = false;
+  document.getElementById('freqPlayBtn').textContent = 'Play';
+}
+
+function startFrequencyTone(presetKey) {
+  stopFrequencyTone();
+  const preset = FREQ_PRESETS[presetKey];
+  freqCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const merger = freqCtx.createChannelMerger(2);
+
+  freqOscL = freqCtx.createOscillator();
+  const gainL = freqCtx.createGain();
+  freqOscL.frequency.value = preset.carrier;
+  gainL.gain.value = 0.15;
+  freqOscL.connect(gainL).connect(merger, 0, 0);
+
+  freqOscR = freqCtx.createOscillator();
+  const gainR = freqCtx.createGain();
+  freqOscR.frequency.value = preset.carrier + preset.beat;
+  gainR.gain.value = 0.15;
+  freqOscR.connect(gainR).connect(merger, 0, 1);
+
+  merger.connect(freqCtx.destination);
+  freqOscL.start();
+  freqOscR.start();
+  freqPlaying = true;
+  document.getElementById('freqPlayBtn').textContent = 'Stop';
+}
+
+document.getElementById('freqPlayBtn').addEventListener('click', () => {
+  if (freqPlaying) {
+    stopFrequencyTone();
+  } else {
+    startFrequencyTone(document.getElementById('freqPreset').value);
+  }
+});
+
+document.getElementById('freqPreset').addEventListener('change', () => {
+  if (freqPlaying) startFrequencyTone(document.getElementById('freqPreset').value);
+});
+
+// Resume where they left off if already registered on this device.
+const existingUser = getStoredUser();
+if (existingUser) showSetupScreen(existingUser);
+</script>
+</body>
+</html>
